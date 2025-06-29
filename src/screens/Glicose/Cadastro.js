@@ -1,8 +1,5 @@
 // File: src/screens/Glicose/Cadastro.js
 
-import { Picker } from '@react-native-picker/picker';
-import { Platform, TouchableOpacity, View, Text } from 'react-native';
-
 import React, { useState, useEffect } from 'react';
 import {
   SafeAreaView,
@@ -20,13 +17,14 @@ import {
   StyleSheet,
   ActionSheetIOS,
 } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 import NetInfo from '@react-native-community/netinfo';
 import { useNavigation } from '@react-navigation/native';
-import { Picker } from '@react-native-picker/picker';
 import api from '../../services/api';
 import { cachePacienteTipagem } from '../../storage';
 import styles from './styles';
 import { ID_PROCED_GLICOSE } from '../../constants/procedimentos';
+
 
 const SEX_LABEL = { M: 'Masculino', F: 'Feminino' };
 const UF_LIST = [
