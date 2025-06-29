@@ -56,7 +56,7 @@ router.post('/novo', async (req, res) => {
       // cria PACIENTE sem CPF (já está em PESSOAFIS)
       const [insPac] = await conn.query(
         `INSERT INTO PACIENTE
-           (ID_PESSOAFIS, RGPACIENTE, ESTADORGPAC)
+           (ID_PESSOAFIS, RGPACIENTE, ESTDORGPAC)
          VALUES (?,?,?)`,
         [idPessoaFis, rg, rgUf],
       );
