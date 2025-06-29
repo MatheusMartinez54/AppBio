@@ -38,9 +38,9 @@ router.post('/novo', async (req, res) => {
       // cria PESSOAFIS (aqui grava o CPF)
       const [insPF] = await conn.query(
         `INSERT INTO PESSOAFIS
-           (ID_PESSOA, NOMEPESSOA, CPFPESSOA, DATANASCPES, SEXOPESSOA)
+           (ID_PESSOA, CPFPESSOA, NOMEPESSOA, DATANASCPES, SEXOPESSOA)
          VALUES (?,?,?,?,?)`,
-        [idPessoa, nome, cpf, dataNascimento, sexo],
+        [idPessoa,cpf, nome, dataNascimento, sexo],
       );
       idPessoaFis = insPF.insertId;
     }
@@ -56,9 +56,9 @@ router.post('/novo', async (req, res) => {
       // cria PACIENTE sem CPF (já está em PESSOAFIS)
       const [insPac] = await conn.query(
         `INSERT INTO PACIENTE
-           (ID_PESSOAFIS, NOME, DATANASC, SEXO, RG, RG_UF, TELEFONE)
+           (ID_PESSOAFIS, RG, RG_UF)
          VALUES (?,?,?,?,?,?,?)`,
-        [idPessoaFis, nome, dataNascimento, sexo, rg, rgUf, telefone],
+        [idPessoaFis, rg, rgUf],
       );
       idPaciente = insPac.insertId;
     }
