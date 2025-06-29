@@ -35,7 +35,7 @@ router.post('/novo', async (req, res) => {
       const [insPessoa] = await conn.query('INSERT INTO PESSOA (TIPOPESSOA) VALUES (?)', ['F']);
       idPessoa = insPessoa.insertId;
 
-      // cria PESSOAFIS
+      // cria PESSOAFIS (aqui grava o CPF)
       const [insPF] = await conn.query(
         `INSERT INTO PESSOAFIS
            (ID_PESSOA, NOMEPESSOA, CPFPESSOA, DATANASCPES, SEXOPESSOA)
@@ -53,17 +53,17 @@ router.post('/novo', async (req, res) => {
       // paciente já existia
       idPaciente = existPac.IDPACIENTE;
     } else {
-      // cria PACIENTE e captura o insertId
+      // cria PACIENTE sem CPF (já está em PESSOAFIS)
       const [insPac] = await conn.query(
         `INSERT INTO PACIENTE
-           (ID_PESSOAFIS, CPF, NOME, DATANASC, SEXO, RG, RG_UF, TELEFONE)
-         VALUES (?,?,?,?,?,?,?,?)`,
-        [idPessoaFis, cpf, nome, dataNascimento, sexo, rg, rgUf, telefone],
+           (ID_PESSOAFIS, NOME, DATANASC, SEXO, RG, RG_UF, TELEFONE)
+         VALUES (?,?,?,?,?,?,?)`,
+        [idPessoaFis, nome, dataNascimento, sexo, rg, rgUf, telefone],
       );
       idPaciente = insPac.insertId;
     }
 
-    // 3) Mesmo se já existia, atualiza o telefone em CONTATO (tipo 2 = telefone)
+    // 3) Atualiza telefone em CONTATO (tipo 2 = telefone)
     if (telefone) {
       await conn.query(
         `DELETE FROM CONTATO
