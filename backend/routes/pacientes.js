@@ -40,7 +40,7 @@ router.post('/novo', async (req, res) => {
         `INSERT INTO PESSOAFIS
            (ID_PESSOA, CPFPESSOA, NOMEPESSOA, DATANASCPES, SEXOPESSOA)
          VALUES (?,?,?,?,?)`,
-        [idPessoa,cpf, nome, dataNascimento, sexo],
+        [idPessoa, cpf, nome, dataNascimento, sexo],
       );
       idPessoaFis = insPF.insertId;
     }
@@ -57,7 +57,7 @@ router.post('/novo', async (req, res) => {
       const [insPac] = await conn.query(
         `INSERT INTO PACIENTE
            (ID_PESSOAFIS, RG, RG_UF)
-         VALUES (?,?,?,?,?,?,?)`,
+         VALUES (?,?,?)`,
         [idPessoaFis, rg, rgUf],
       );
       idPaciente = insPac.insertId;
