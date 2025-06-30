@@ -61,22 +61,16 @@ router.post('/novo', async (req, res) => {
         [idPessoaFis, rg, rgUf],
       );
       idPaciente = insPac.insertId;
-    }
 
-    // 3) Atualiza telefone em CONTATO (tipo 2 = telefone)
-    if (telefone) {
-      await conn.query(
-        `DELETE FROM CONTATO
-           WHERE ID_PESSOA = ?
-             AND ID_TIPOCONTATO = 2`,
-        [idPessoa],
-      );
-      await conn.query(
-        `INSERT INTO CONTATO
-           (ID_TIPOCONTATO, NUMERO, ID_PESSOA)
-         VALUES (2,?,?)`,
-        [telefone, idPessoa],
-      );
+      // insere telefone em CONTATO apenas para novos pacientes (tipo 2 = telefone)
+      if (telefone) {
+        await conn.query(
+          `INSERT INTO CONTATO
+             (ID_TIPOCONTATO, NUMERO, ID_PESSOA)
+           VALUES (2, ?, ?)`,
+          [telefone, idPessoa],
+        );
+      }
     }
 
     await conn.commit();
