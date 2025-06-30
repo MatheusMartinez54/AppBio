@@ -26,16 +26,18 @@ router.post('/novo', async (req, res) => {
     // 1) Verifica se já existe PESSOAFIS para este CPF
     const [[existPF] = []] = await conn.query('SELECT IDPESSOAFIS, ID_PESSOA FROM PESSOAFIS WHERE CPFPESSOA = ? LIMIT 1', [cpf]);
 
-    let idPessoaFis, idPessoa;
+    let idPessoaFis;
+    let idPessoa;
     if (existPF) {
+      // já existe, usa os IDs existentes
       idPessoaFis = existPF.IDPESSOAFIS;
       idPessoa = existPF.ID_PESSOA;
     } else {
-      // cria PESSOA (necessário para a FK de PESSOAFIS)
+      // cria PESSOA (necessário para PESSOAFIS)
       const [insPessoa] = await conn.query('INSERT INTO PESSOA (TIPOPESSOA) VALUES (?)', ['F']);
       idPessoa = insPessoa.insertId;
 
-      // cria PESSOAFIS (aqui grava o CPF)
+      // cria PESSOAFIS
       const [insPF] = await conn.query(
         `INSERT INTO PESSOAFIS
            (ID_PESSOA, CPFPESSOA, NOMEPESSOA, DATANASCPES, SEXOPESSOA)
@@ -53,7 +55,7 @@ router.post('/novo', async (req, res) => {
       // paciente já existia
       idPaciente = existPac.IDPACIENTE;
     } else {
-      // cria PACIENTE sem CPF (já está em PESSOAFIS)
+      // cria PACIENTE
       const [insPac] = await conn.query(
         `INSERT INTO PACIENTE
            (ID_PESSOAFIS, RGPACIENTE, ESTDORGPAC)
@@ -62,23 +64,22 @@ router.post('/novo', async (req, res) => {
       );
       idPaciente = insPac.insertId;
 
-      // insere telefone em CONTATO apenas para novos pacientes (tipo 2 = telefone)
+      // insere telefone em CONTATO apenas para novos pacientes
       if (telefone) {
-        // insere telefone em CONTATO (tipo 2 = telefone), usando o ID da PESSOA
         await conn.query(
           `INSERT INTO CONTATO
-           (ID_TIPOCONTATO, NUMERO, ID_PESSOA)
-         VALUES (2, ?, ?)`,
-          [telefone, idPessoa],
+             (ID_PESSOA, ID_TIPOCONTATO, NUMERO)
+           VALUES (?,?,?)`,
+          [idPessoa, 2, telefone],
         );
       }
     }
 
     await conn.commit();
     return res.status(existPac ? 200 : 201).json({ idPaciente, idPessoaFis });
-  } catch (e) {
+  } catch (error) {
     await conn.rollback();
-    console.error('ERRO /pacientes/novo:', e);
+    console.error('ERRO /pacientes/novo:', error);
     return res.status(500).json({ error: 'Erro interno.' });
   } finally {
     conn.release();
@@ -99,11 +100,11 @@ router.get('/:id', async (req, res) => {
   try {
     const [[row] = []] = await pool.query(
       `SELECT
-         P.IDPACIENTE                       AS id,
-         PF.NOMEPESSOA                      AS nome,
-         PF.CPFPESSOA                       AS cpf,
+         P.IDPACIENTE                         AS id,
+         PF.NOMEPESSOA                        AS nome,
+         PF.CPFPESSOA                         AS cpf,
          DATE_FORMAT(PF.DATANASCPES, '%d/%m/%Y') AS dataNascimento,
-         CO.NUMERO                          AS telefone
+         CO.NUMERO                            AS telefone
        FROM PACIENTE P
        JOIN PESSOAFIS PF
          ON PF.IDPESSOAFIS = P.ID_PESSOAFIS
