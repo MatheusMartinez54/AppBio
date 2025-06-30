@@ -8,23 +8,33 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import api from '../../services/api';
 
+// Função para aplicar máscara de status
+function maskStatus(status) {
+  switch (status) {
+    case 'PEND':
+      return 'Pendente';
+    case 'CONC':
+      return 'Concluído';
+    case 'CANC':
+      return 'Cancelado';
+    default:
+      return status;
+  }
+}
+
 export default function Relatorios() {
   const isFocused = useIsFocused();
 
-  // dados
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // procedimentos fixos
   const [procedures, setProcedures] = useState([
     { label: 'Tipagem', value: 4350, selected: false },
     { label: 'Glicose', value: 3027, selected: false },
   ]);
 
-  // locais via API
   const [locals, setLocals] = useState([]);
 
-  // carrega lista de locais só uma vez
   useEffect(() => {
     (async () => {
       try {
@@ -36,7 +46,6 @@ export default function Relatorios() {
     })();
   }, []);
 
-  // toda vez que muda foco ou filtros, recarrega
   useEffect(() => {
     fetchReports();
   }, [isFocused, procedures, locals]);
@@ -52,14 +61,12 @@ export default function Relatorios() {
         .filter((l) => l.selected)
         .map((l) => l.id)
         .join(',');
-
       const res = await api.get('/relatorios', {
-        params: {
-          procedimentos: procIds,
-          locais: locIds,
-        },
+        params: { procedimentos: procIds, locais: locIds },
       });
-      setData(res.data);
+      // Ordena pelo ID crescente (menor para maior)
+      const sorted = Array.isArray(res.data) ? res.data.sort((a, b) => a.id - b.id) : [];
+      setData(sorted);
     } catch (err) {
       console.error('Erro ao carregar relatórios:', err);
       Alert.alert('Erro', 'Não foi possível carregar os relatórios.');
@@ -80,64 +87,47 @@ export default function Relatorios() {
     setLocals(copy);
   }
 
-  // monta e dispara a impressão do PDF
   async function handleGeneratePDF() {
     if (!data.length) {
       Alert.alert('Sem registros', 'Não há dados para gerar PDF.');
       return;
     }
-    // monta linhas da tabela
-    const rowsHtml = data.map(item => {
-   // se vier nulo, tenta o label fixo, senão mostra o próprio idProced
-   const procLabel =
-     item.procedimentoNome ||
-     procedures.find(p => p.value === item.idProced)?.label ||
-     item.idProced;
-        const statusLabel = item.status === 'CONC' ? 'Concluído' : item.status;
+    const rowsHtml = data
+      .map((item) => {
+        const procLabel = item.procedimentoNome || procedures.find((p) => p.value === item.idProced)?.label || item.idProced;
+        const statusLabel = maskStatus(item.status);
+        // usa resultado, senão observacao (tipagem)
+        const resultado = item.resultado != null ? item.resultado : item.observacao != null ? item.observacao : '-';
         return `
         <tr>
           <td>${item.id}</td>
           <td>${procLabel}</td>
           <td>${item.local}</td>
-          <td>${item.resultado}</td>
+          <td>${resultado}</td>
           <td>${statusLabel}</td>
         </tr>`;
       })
       .join('');
-
     const html = `
       <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Relatórios Filtrados</title>
-        </head>
+        <head><meta charset="utf-8"><title>Relatórios Filtrados</title></head>
         <body style="font-family:sans-serif;padding:20px">
           <h1 style="color:#388e3c">Relatórios</h1>
           <table border="1" cellpadding="6" cellspacing="0" width="100%" style="border-collapse:collapse">
             <thead>
               <tr style="background-color:#c8e6c9">
-                <th>ID</th>
-                <th>Procedimento</th>
-                <th>Local</th>
-                <th>Resultado</th>
-                <th>Status</th>
+                <th>ID</th><th>Procedimento</th><th>Local</th><th>Resultado</th><th>Status</th>
               </tr>
             </thead>
-            <tbody>
-              ${rowsHtml}
-            </tbody>
+            <tbody>${rowsHtml}</tbody>
           </table>
         </body>
       </html>
     `;
-
     try {
       const { uri } = await Print.printToFileAsync({ html });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri);
-      } else {
-        Alert.alert('Compartilhamento não disponível');
-      }
+      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
+      else Alert.alert('Compartilhamento não disponível');
     } catch (err) {
       console.error('Erro ao gerar PDF:', err);
       Alert.alert('Erro', 'Falha ao gerar o PDF.');
@@ -145,15 +135,16 @@ export default function Relatorios() {
   }
 
   function renderItem({ item }) {
-    // se não vier do backend, usamos o label fixo como fallback
     const procLabel = item.procedimentoNome || procedures.find((p) => p.value === item.idProced)?.label || item.idProced;
+    const statusLabel = maskStatus(item.status);
+    const resultado = item.resultado != null ? item.resultado : item.observacao != null ? item.observacao : '-';
     return (
       <View style={styles.itemContainer}>
         <Text style={styles.itemTitle}>ID: {item.id}</Text>
         <Text style={styles.itemText}>Procedimento: {procLabel}</Text>
         <Text style={styles.itemText}>Local: {item.local}</Text>
-        <Text style={styles.itemText}>Resultado: {item.resultado}</Text>
-        <Text style={styles.itemText}>Status: {item.status === 'CONC' ? 'Concluído' : item.status}</Text>
+        <Text style={styles.itemText}>Resultado: {resultado}</Text>
+        <Text style={styles.itemText}>Status: {statusLabel}</Text>
       </View>
     );
   }
@@ -181,7 +172,6 @@ export default function Relatorios() {
           ))}
         </View>
 
-        {/* botão de gerar PDF */}
         <TouchableOpacity style={styles.pdfButton} onPress={handleGeneratePDF}>
           <Ionicons name="document-text-outline" size={20} color="#fff" />
           <Text style={styles.pdfButtonText}>Gerar PDF</Text>
@@ -192,13 +182,10 @@ export default function Relatorios() {
 
   return (
     <View style={styles.container}>
-      {/* Header fixo */}
       <View style={styles.header}>
         <Ionicons name="document-text" size={48} color="#388e3c" />
         <Text style={styles.headerText}>Relatórios</Text>
       </View>
-
-      {/* Conteúdo: filtros + lista rolável */}
       {loading ? (
         <ActivityIndicator style={{ marginTop: 32 }} size="large" color="#388e3c" />
       ) : (
@@ -215,53 +202,24 @@ export default function Relatorios() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#e8f5e9',
-  },
-  header: {
-    paddingTop: 16,
-    paddingBottom: 8,
-    alignItems: 'center',
-    backgroundColor: '#e8f5e9',
-  },
-  headerText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#388e3c',
-  },
+  container: { flex: 1, backgroundColor: '#e8f5e9' },
+  header: { paddingTop: 16, paddingBottom: 8, alignItems: 'center', backgroundColor: '#e8f5e9' },
+  headerText: { fontSize: 24, fontWeight: 'bold', color: '#388e3c' },
   filterCard: {
     backgroundColor: '#fff',
     borderRadius: 8,
     padding: 12,
     marginBottom: 16,
-    // sombra iOS
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
-    // sombra Android
     elevation: 2,
   },
-  filterLabel: {
-    fontWeight: 'bold',
-    color: '#388e3c',
-  },
-  filterRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 8,
-  },
-  filterOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 16,
-    marginBottom: 8,
-  },
-  filterOptionText: {
-    marginLeft: 4,
-    color: '#388e3c',
-  },
+  filterLabel: { fontWeight: 'bold', color: '#388e3c' },
+  filterRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8 },
+  filterOption: { flexDirection: 'row', alignItems: 'center', marginRight: 16, marginBottom: 8 },
+  filterOptionText: { marginLeft: 4, color: '#388e3c' },
   pdfButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -271,26 +229,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginTop: 16,
   },
-  pdfButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
-  itemContainer: {
-    backgroundColor: '#c8e6c9',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  itemTitle: {
-    fontWeight: 'bold',
-    fontSize: 16,
-    color: '#2e7d32',
-    marginBottom: 4,
-  },
-  itemText: {
-    fontSize: 14,
-    color: '#2e7d32',
-    marginBottom: 2,
-  },
+  pdfButtonText: { color: '#fff', fontWeight: 'bold', marginLeft: 8 },
+  itemContainer: { backgroundColor: '#c8e6c9', padding: 16, borderRadius: 8, marginBottom: 12 },
+  itemTitle: { fontWeight: 'bold', fontSize: 16, color: '#2e7d32', marginBottom: 4 },
+  itemText: { fontSize: 14, color: '#2e7d32', marginBottom: 2 },
 });

@@ -100,7 +100,7 @@ export default function TipagemCadastro() {
     (async () => {
       try {
         const { data } = await api.get('/loccolet');
-        setLocais(data); // data = [{id,DESCRICAO}]
+        setLocais(data);
       } catch (e) {
         console.log('Falha /loccolet', e);
       }
@@ -136,7 +136,11 @@ export default function TipagemCadastro() {
     if (Platform.OS !== 'ios') return;
     const labels = locais.map((l) => l.DESCRICAO);
     ActionSheetIOS.showActionSheetWithOptions(
-      { title: 'Local de Coleta', options: [...labels, 'Outro...', 'Cancelar'], cancelButtonIndex: labels.length + 1 },
+      {
+        title: 'Local de Coleta',
+        options: [...labels, 'Outro...', 'Cancelar'],
+        cancelButtonIndex: labels.length + 1,
+      },
       (i) => {
         if (i < labels.length) {
           setLocSelecionado(String(locais[i].id));
@@ -176,10 +180,8 @@ export default function TipagemCadastro() {
       setSexo(rawSex === 'F' ? 'F' : 'M');
       setRg(String(data.RG || '').replace(/\D/g, ''));
       setRgUf((data.RG_UF || '').toString().trim().toUpperCase());
-
       const firstTel = (data.NUMEROS || '').split(',')[0] || '';
       setTelefone(fmtTel(firstTel));
-
       Alert.alert('Encontrado', 'Dados preenchidos.');
     } catch (err) {
       err.response?.status === 404 ? Alert.alert('Não encontrado', 'CPF não cadastrado.') : Alert.alert('Erro', 'Falha ao consultar CPF.');
@@ -244,10 +246,10 @@ export default function TipagemCadastro() {
       /* resulexame ------------------------------------------------------- */
       await api.post('/resulsexame/novo', {
         idAgenda: null,
-        idProced: ID_PROCED_TIPAGEM, // vem da constante centralizada
+        idProced: ID_PROCED_TIPAGEM,
         idPaciente,
         idLocColet,
-        dataCole: new Date().toISOString().slice(0, 19).replace('T', ' '), // 'YYYY-MM-DD HH:mm:ss'
+        dataCole: new Date().toISOString().slice(0, 19).replace('T', ' '),
         observacao,
       });
 
@@ -260,7 +262,6 @@ export default function TipagemCadastro() {
     }
   };
 
-  /* ---------------- UI ---------------- */
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -310,9 +311,19 @@ export default function TipagemCadastro() {
 
                   {/* Sexo ---------------------------------------------- */}
                   <Text style={styles.label}>Sexo:</Text>
-                  <TouchableOpacity style={localStyles.select} onPress={openSexoSelector}>
-                    <Text>{SEX_LABEL[sexo]}</Text>
-                  </TouchableOpacity>
+                  {Platform.OS === 'ios' ? (
+                    <TouchableOpacity style={localStyles.select} onPress={openSexoSelector}>
+                      <Text>{SEX_LABEL[sexo]}</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={localStyles.pickerWrapper}>
+                      <Picker selectedValue={sexo} onValueChange={(valor) => setSexo(valor)} mode="dropdown" style={localStyles.picker}>
+                        <Picker.Item label="Selecione o sexo" value="" />
+                        <Picker.Item label="Masculino" value="M" />
+                        <Picker.Item label="Feminino" value="F" />
+                      </Picker>
+                    </View>
+                  )}
 
                   {/* RG ------------------------------------------------ */}
                   <Text style={styles.label}>RG:</Text>
@@ -361,7 +372,7 @@ export default function TipagemCadastro() {
                           ? 'Selecione...'
                           : locSelecionado === OUTRO_VALUE
                           ? 'Outro...'
-                          : locais.find((l) => String(l.id) === locSelecionado)?.DESCRICAO ?? '---'}
+                          : locais.find((l) => String(l.id) === locSelecionado)?.DESCRICAO || '---'}
                       </Text>
                     </TouchableOpacity>
                   ) : (
@@ -372,6 +383,8 @@ export default function TipagemCadastro() {
                           setLocSelecionado(v);
                           if (v !== OUTRO_VALUE) setNovoLocal('');
                         }}
+                        mode="dropdown"
+                        style={localStyles.picker}
                       >
                         <Picker.Item label="Selecione..." value="" />
                         {locais.map((l) => (
@@ -392,7 +405,7 @@ export default function TipagemCadastro() {
 
                   {/* Observação --------------------------------------- */}
                   <Text style={styles.label}>Observação:</Text>
-                  <TextInput style={styles.input} value={observacao} onChangeText={setObservacao} placeholder="Observação opcional" />
+                  <TextInput style={styles.input} value={observacao} onChangeText={setObservacao} placeholder="Observação opcional" multiline />
 
                   {/* Salvar ------------------------------------------- */}
                   <TouchableOpacity style={styles.button} onPress={handleSalvar}>
@@ -426,5 +439,5 @@ const localStyles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 12,
   },
-  picker: { height: 42 },
+  picker: { height: 50 },
 });

@@ -274,7 +274,7 @@ export default function GlicoseCadastro() {
                   <TextInput style={[styles.input, { backgroundColor: '#eee' }]} value={cpfSearch} editable={false} />
                   <Text style={styles.label}>Nome:</Text>
                   <TextInput style={styles.input} value={nome} onChangeText={setNome} />
-                  <Text style={styles.label}>Data de Nasc.:</Text>
+                  <Text style={styles.label}>Data de Nascimento:</Text>
                   <TextInput style={styles.input} value={dataN} onChangeText={(t) => setDataN(fmtData(t))} keyboardType="numeric" maxLength={10} />
                   <Text style={styles.label}>Sexo:</Text>
                   {Platform.OS === 'ios' ? (
@@ -283,7 +283,7 @@ export default function GlicoseCadastro() {
                     </TouchableOpacity>
                   ) : (
                     <View style={localStyles.pickerWrapper}>
-                      <Picker selectedValue={sexo} onValueChange={(valor) => setSexo(valor)} mode="dropdown" style={{ height: 48 }}>
+                      <Picker selectedValue={sexo} onValueChange={(valor) => setSexo(valor)} mode="dropdown" style={{ height: 50 }}>
                         <Picker.Item label="Selecione o sexo" value="" />
                         <Picker.Item label="Masculino" value="M" />
                         <Picker.Item label="Feminino" value="F" />

@@ -9,6 +9,27 @@ import Dialog from 'react-native-dialog';
 import api from '../../services/api';
 import styles from './styles';
 
+// Função para formatação de data ISO para BR
+function fmtIsoToBr(iso) {
+  if (!iso) return '-';
+  const [y, m, d] = iso.substring(0, 10).split('-');
+  return `${d}/${m}/${y}`;
+}
+
+// Máscara para exibir status legível
+function maskStatus(status) {
+  switch (status) {
+    case 'PEND':
+      return 'Pendente';
+    case 'CONC':
+      return 'Concluído';
+    case 'CANC':
+      return 'Cancelado';
+    default:
+      return status;
+  }
+}
+
 export default function GlicoseDetalhes() {
   const { exameId, pacienteId, origem } = useRoute().params;
   const navigation = useNavigation();
@@ -54,12 +75,9 @@ export default function GlicoseDetalhes() {
 
     // somente a linha aplicada
     const refHtml = referenciaAplicada
-      ? `
-      <tr>
-    <td>${referenciaAplicada.DESCRICAO}</td>
-    <td>${parseFloat(referenciaAplicada.VALMIN)} – ${parseFloat(referenciaAplicada.VALMAX)}</td>
-  </tr>
-    `
+      ? `<tr><td>${referenciaAplicada.DESCRICAO}</td><td>${parseFloat(referenciaAplicada.VALMIN)} – ${parseFloat(
+          referenciaAplicada.VALMAX,
+        )}</td></tr>`
       : '';
 
     const dicaHtml = exame.dica ? `<p class="section"><strong>Dica:</strong> ${exame.dica}</p>` : '';
@@ -91,7 +109,7 @@ export default function GlicoseDetalhes() {
           <p><strong>Valor da Glicose:</strong> ${exame.resultado || '-'} mg/dL</p>
           <p><strong>Metodologia:</strong> ${exame.metodoNome || '-'}</p>
 
-          <p><strong>Status:</strong> ${exame.status}</p>
+          <p><strong>Status:</strong> ${maskStatus(exame.status)}</p>
           ${exame.motivo ? `<p><strong>Motivo Cancelamento:</strong> ${exame.motivo}</p>` : ''}
         </div>
 
@@ -196,7 +214,7 @@ export default function GlicoseDetalhes() {
           <Text style={styles.value}>{exame.metodoNome ?? '-'}</Text>
 
           <Text style={styles.label}>Status:</Text>
-          <Text style={[styles.value, exame.status === 'CANC' && { color: '#c62828' }]}>{exame.status}</Text>
+          <Text style={styles.value}>{maskStatus(exame.status)}</Text>
 
           {exame.motivo && (
             <>
