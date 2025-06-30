@@ -24,7 +24,10 @@ router.post('/novo', async (req, res) => {
     await conn.beginTransaction();
 
     // 1) Verifica se já existe PESSOAFIS para este CPF
-    const [[existPF] = []] = await conn.query('SELECT IDPESSOAFIS, ID_PESSOA FROM PESSOAFIS WHERE CPFPESSOA = ? LIMIT 1', [cpf]);
+    const [[existPF] = []] = await conn.query(
+      'SELECT IDPESSOAFIS, ID_PESSOA FROM PESSOAFIS WHERE CPFPESSOA = ? LIMIT 1',
+      [cpf]
+    );
 
     let idPessoaFis, idPessoa;
     if (existPF) {
@@ -32,7 +35,10 @@ router.post('/novo', async (req, res) => {
       idPessoa = existPF.ID_PESSOA;
     } else {
       // cria PESSOA (necessário para a FK de PESSOAFIS)
-      const [insPessoa] = await conn.query('INSERT INTO PESSOA (TIPOPESSOA) VALUES (?)', ['F']);
+      const [insPessoa] = await conn.query(
+        'INSERT INTO PESSOA (TIPOPESSOA) VALUES (?)',
+        ['F']
+      );
       idPessoa = insPessoa.insertId;
 
       // cria PESSOAFIS (aqui grava o CPF)
@@ -40,13 +46,16 @@ router.post('/novo', async (req, res) => {
         `INSERT INTO PESSOAFIS
            (ID_PESSOA, CPFPESSOA, NOMEPESSOA, DATANASCPES, SEXOPESSOA)
          VALUES (?,?,?,?,?)`,
-        [idPessoa, cpf, nome, dataNascimento, sexo],
+        [idPessoa, cpf, nome, dataNascimento, sexo]
       );
       idPessoaFis = insPF.insertId;
     }
 
     // 2) Verifica se já existe PACIENTE para este PESSOAFIS
-    const [[existPac] = []] = await conn.query('SELECT IDPACIENTE FROM PACIENTE WHERE ID_PESSOAFIS = ? LIMIT 1', [idPessoaFis]);
+    const [[existPac] = []] = await conn.query(
+      'SELECT IDPACIENTE FROM PACIENTE WHERE ID_PESSOAFIS = ? LIMIT 1',
+      [idPessoaFis]
+    );
 
     let idPaciente;
     if (existPac) {
@@ -58,7 +67,7 @@ router.post('/novo', async (req, res) => {
         `INSERT INTO PACIENTE
            (ID_PESSOAFIS, RGPACIENTE, ESTDORGPAC)
          VALUES (?,?,?)`,
-        [idPessoaFis, rg, rgUf],
+        [idPessoaFis, rg, rgUf]
       );
       idPaciente = insPac.insertId;
 
@@ -68,7 +77,7 @@ router.post('/novo', async (req, res) => {
           `INSERT INTO CONTATO
              (ID_TIPOCONTATO, NUMERO, ID_PESSOA)
            VALUES (2, ?, ?)`,
-          [telefone, idPessoa],
+          [telefone, idPaciente]
         );
       }
     }
@@ -111,7 +120,7 @@ router.get('/:id', async (req, res) => {
         AND CO.ID_TIPOCONTATO = 2
        WHERE P.IDPACIENTE = ?
        LIMIT 1`,
-      [id],
+      [id]
     );
 
     if (!row) {
