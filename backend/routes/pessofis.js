@@ -32,7 +32,7 @@ router.get('/', async (req, res) => {
 
        FROM PESSOAFIS  pf
        LEFT JOIN PACIENTE pa   ON pa.ID_PESSOAFIS = pf.IDPESSOAFIS
-       LEFT JOIN CONTATO  c    ON c.ID_PESSOA     = pa.ID_PACIENTE
+       LEFT JOIN CONTATO  c    ON c.ID_PESSOA     = pa.IDPACIENTE
 
        WHERE pf.CPFPESSOA = ?
        GROUP BY pf.IDPESSOAFIS
