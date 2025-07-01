@@ -32,7 +32,7 @@ router.get('/', async (req, res) => {
 
        FROM PESSOAFIS  pf
        LEFT JOIN PACIENTE pa   ON pa.ID_PESSOAFIS = pf.IDPESSOAFIS
-       LEFT JOIN CONTATO  c    ON c.ID_PESSOA     = pa.IDPACIENTE
+       LEFT JOIN CONTATO  c    ON c.ID_PESSOA     = pf.ID_PESSOA
 
        WHERE pf.CPFPESSOA = ?
        GROUP BY pf.IDPESSOAFIS
@@ -53,7 +53,7 @@ router.get('/', async (req, res) => {
          TELEFONES   : '41987654321,659999999'
        }
     */
-   console.log('DEBUG /pessofis →', rows[0]);
+    console.log('DEBUG /pessofis →', rows[0]);
 
     res.json(rows[0]);
   } catch (err) {

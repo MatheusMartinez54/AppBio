@@ -119,14 +119,14 @@ export default function TipagemDetalhes() {
           <LabelValor label="Nome" valor={paciente.nome} />
           <LabelValor label="Data Nascimento" valor={paciente.dataNascimento} />
           <LabelValor label="CPF" valor={paciente.cpf} />
+
           <LabelValor label="Telefone" valor={paciente.telefone ?? '-'} />
+
           <LabelValor label="Local de Coleta" valor={exame.local} />
           <LabelValor label="Observação" valor={exame.observacao || '-'} />
           <LabelValor label="Tipo Sanguíneo" valor={exame.resultado || '-'} negrito />
           {/* Método utilizado (nome) */}
-       {exame.metodoNome && (
-         <LabelValor label="Metodologia" valor={exame.metodoNome} />
-       )}
+          {exame.metodoNome && <LabelValor label="Metodologia" valor={exame.metodoNome} />}
 
           <LabelValor label="Status" valor={exame.status} />
           {exame.motivo && <LabelValor label="Motivo Cancelamento" valor={exame.motivo} />}
