@@ -9,27 +9,14 @@ import Dialog from 'react-native-dialog';
 import api from '../../services/api';
 import styles from './styles';
 
-// Função para formatação de data ISO para BR
-function fmtIsoToBr(iso) {
-  if (!iso) return '-';
-  const [y, m, d] = iso.substring(0, 10).split('-');
-  return `${d}/${m}/${y}`;
-}
+/*──────────────────────────────────────────────*/
+/* Utilidades                                   */
+/*──────────────────────────────────────────────*/
+const maskStatus = (s) => ({ PEND: 'Pendente', CONC: 'Concluído', CANC: 'Cancelado' }[s] ?? s);
 
-// Máscara para exibir status legível
-function maskStatus(status) {
-  switch (status) {
-    case 'PEND':
-      return 'Pendente';
-    case 'CONC':
-      return 'Concluído';
-    case 'CANC':
-      return 'Cancelado';
-    default:
-      return status;
-  }
-}
-
+/*──────────────────────────────────────────────*/
+/* Componente                                   */
+/*──────────────────────────────────────────────*/
 export default function GlicoseDetalhes() {
   const { exameId, pacienteId, origem } = useRoute().params;
   const navigation = useNavigation();
@@ -42,6 +29,7 @@ export default function GlicoseDetalhes() {
   const [showCancel, setShowCancel] = useState(false);
   const [motivo, setMotivo] = useState('');
 
+  /*────────── Carregamento ──────────*/
   useEffect(() => {
     if (origem === 'offline') {
       Alert.alert('Offline', 'Registro ainda não sincronizado.');
@@ -51,7 +39,10 @@ export default function GlicoseDetalhes() {
     (async () => {
       try {
         setLoading(true);
-        const [{ data: ex }, { data: pc }] = await Promise.all([api.get(`/resulsexame/${exameId}`), api.get(`/pacientes/${pacienteId}`)]);
+        const [{ data: ex }, { data: pc }] = await Promise.all([
+          api.get(`/resulsexame/${exameId}`), // inclui gestante / jejum
+          api.get(`/pacientes/${pacienteId}`), // inclui sexo
+        ]);
         setExame(ex);
         setPaciente(pc);
       } catch (err) {
@@ -63,18 +54,18 @@ export default function GlicoseDetalhes() {
     })();
   }, [exameId, pacienteId, origem, isFocused]);
 
-  // Pega só a referência que cobre o valor
+  /*────────── Referência aplicada ──────────*/
   const referenciaAplicada = useMemo(() => {
     if (!exame?.referencias || !exame.resultado) return null;
     const v = parseFloat(exame.resultado);
     return exame.referencias.find((r) => v >= r.VALMIN && v <= r.VALMAX) || null;
   }, [exame]);
 
+  /*────────── PDF ──────────*/
   async function handleGerarPDF() {
     if (!paciente || !exame) return;
 
-    // somente a linha aplicada
-    const refHtml = referenciaAplicada
+    const refRow = referenciaAplicada
       ? `<tr><td>${referenciaAplicada.DESCRICAO}</td><td>${parseFloat(referenciaAplicada.VALMIN)} – ${parseFloat(
           referenciaAplicada.VALMAX,
         )}</td></tr>`
@@ -83,21 +74,14 @@ export default function GlicoseDetalhes() {
     const dicaHtml = exame.dica ? `<p class="section"><strong>Dica:</strong> ${exame.dica}</p>` : '';
 
     const html = `
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <style>
-          body { font-family: sans-serif; padding: 20px; line-height: 1.5; }
-          h1 { color: #2e7d32; margin-bottom: 0.3em; }
-          p { margin: 0.3em 0; }
-          .section { margin-top: 1.2em; }
-          table { border-collapse: collapse; width: 100%; margin-top: 1em; }
-          th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: left; }
-          th { background-color: #f0f0f0; }
-          tr:nth-child(even) { background-color: #fafafa; }
-        </style>
-      </head>
-      <body>
+      <html><head><meta charset="utf-8"><style>
+        body{font-family:sans-serif;padding:20px;line-height:1.5}
+        h1{color:#2e7d32;margin-bottom:.3em}
+        p{margin:.3em 0}.section{margin-top:1.2em}
+        table{border-collapse:collapse;width:100%;margin-top:1em}
+        th,td{border:1px solid #ccc;padding:8px 12px;text-align:left}
+        th{background-color:#f0f0f0}tr:nth-child(even){background:#fafafa}
+      </style></head><body>
         <h1>Detalhes do Paciente (Glicose)</h1>
         <div class="section">
           <p><strong>Nome:</strong> ${paciente.nome}</p>
@@ -105,47 +89,35 @@ export default function GlicoseDetalhes() {
           <p><strong>CPF:</strong> ${paciente.cpf}</p>
           <p><strong>Telefone:</strong> ${paciente.telefone ?? '-'}</p>
           <p><strong>Local de Coleta:</strong> ${exame.local}</p>
+          <p><strong>Jejum:</strong> ${exame.jejum ? 'Sim' : 'Não'}</p>
+          ${paciente.sexo?.startsWith('F') ? `<p><strong>Gestante:</strong> ${exame.gestante ? 'Sim' : 'Não'}</p>` : ''}
           <p><strong>Observação:</strong> ${exame.observacao || '-'}</p>
           <p><strong>Valor da Glicose:</strong> ${exame.resultado || '-'} mg/dL</p>
           <p><strong>Metodologia:</strong> ${exame.metodoNome || '-'}</p>
-
           <p><strong>Status:</strong> ${maskStatus(exame.status)}</p>
           ${exame.motivo ? `<p><strong>Motivo Cancelamento:</strong> ${exame.motivo}</p>` : ''}
         </div>
-
         ${
           exame.status === 'CONC' && referenciaAplicada
-            ? `
-          <div class="section">
-            <h2>Referência Aplicada</h2>
-            <table>
-              <tr>
-                <th>Tipo</th>
-                <th>Intervalo (mg/dL)</th>
-              </tr>
-              ${refHtml}
-            </table>
-            ${dicaHtml}
-          </div>
-        `
+            ? `<div class="section"><h2>Referência Aplicada</h2>
+                 <table><tr><th>Tipo</th><th>Intervalo (mg/dL)</th></tr>${refRow}</table>
+                 ${dicaHtml}
+               </div>`
             : ''
         }
-      </body>
-      </html>
+      </body></html>
     `;
 
     try {
       const { uri } = await Print.printToFileAsync({ html });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri);
-      } else {
-        Alert.alert('Compartilhamento não disponível');
-      }
+      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
+      else Alert.alert('Compartilhamento não disponível');
     } catch {
       Alert.alert('Erro', 'Falha ao gerar o PDF');
     }
   }
 
+  /*────────── Cancelamento ──────────*/
   async function confirmarCancel() {
     if (!motivo.trim()) {
       Alert.alert('Atenção', 'Informe o motivo.');
@@ -163,6 +135,7 @@ export default function GlicoseDetalhes() {
     }
   }
 
+  /*────────── Loading / Erro ──────────*/
   if (loading) {
     return (
       <SafeAreaView style={styles.safeContainer}>
@@ -178,6 +151,7 @@ export default function GlicoseDetalhes() {
     );
   }
 
+  /*────────── Render ──────────*/
   return (
     <SafeAreaView style={styles.safeContainer}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
@@ -203,6 +177,17 @@ export default function GlicoseDetalhes() {
 
           <Text style={styles.label}>Local de Coleta:</Text>
           <Text style={styles.value}>{exame.local}</Text>
+
+          {/* Novos campos */}
+          <Text style={styles.label}>Jejum:</Text>
+          <Text style={styles.value}>{exame.jejum ? 'Sim' : 'Não'}</Text>
+
+          {paciente.sexo?.startsWith('F') && (
+            <>
+              <Text style={styles.label}>Gestante:</Text>
+              <Text style={styles.value}>{exame.gestante ? 'Sim' : 'Não'}</Text>
+            </>
+          )}
 
           <Text style={styles.label}>Observação:</Text>
           <Text style={styles.value}>{exame.observacao || '-'}</Text>
@@ -251,18 +236,20 @@ export default function GlicoseDetalhes() {
               </TouchableOpacity>
             </>
           )}
+
           {exame.status === 'CONC' && (
             <TouchableOpacity style={styles.button} onPress={handleGerarPDF}>
               <Text style={styles.buttonText}>Gerar PDF</Text>
             </TouchableOpacity>
           )}
+
           <TouchableOpacity style={[styles.button, styles.backButton]} onPress={() => navigation.goBack()}>
             <Text style={styles.buttonText}>Voltar</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
 
-      {/* Diálogo */}
+      {/* Diálogo cancelamento */}
       <Dialog.Container visible={showCancel}>
         <Dialog.Title>Cancelar exame</Dialog.Title>
         <Dialog.Description>Informe o motivo do cancelamento:</Dialog.Description>

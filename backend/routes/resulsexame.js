@@ -1,7 +1,7 @@
 // File: backend/routes/resulsexame.js
 const express = require('express');
-const router  = express.Router();
-const pool    = require('../db'); // mysql2/promise
+const router = express.Router();
+const pool = require('../db'); // mysql2/promise
 
 /*────────────────────────────────────────────*/
 /* LISTAGEM SIMPLIFICADA                     */
@@ -28,7 +28,7 @@ router.get('/', async (req, res) => {
        LEFT JOIN PESSOAFIS PF ON PF.IDPESSOAFIS = PA.ID_PESSOAFIS
        WHERE R.ID_PROCED = ?
        ORDER BY R.DATACOLE DESC`,
-      [idProced]
+      [idProced],
     );
     res.json(rows);
   } catch (e) {
@@ -40,14 +40,12 @@ router.get('/', async (req, res) => {
 /*────────────────────────────────────────────*/
 /* ... restante das rotas (detalhes, PUT, etc) ... */
 
-
 /*────────────────────────────────────────────*/
 /* DETALHES + REFERÊNCIAS + METODOLOGIA       */
 /*────────────────────────────────────────────*/
 router.get('/:id', async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0)
-    return res.status(400).json({ error: 'ID inválido.' });
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'ID inválido.' });
 
   try {
     // 1) Exame + método
@@ -58,6 +56,8 @@ router.get('/:id', async (req, res) => {
               DATE_FORMAT(R.DATACOLE,'%Y-%m-%dT%H:%i:%sZ') AS dataColeta,
               LC.DESCRICAO      AS local,
               R.RESULTADO       AS resultado,
+              R.GESTANTE        AS gestante,   -- ❶ novo
+              R.JEJUM           AS jejum,      -- ❷ novo
               R.OBSERVACAO      AS observacao,
               R.MOTCANC         AS motivo,
               R.STATUSEXA       AS status,
@@ -70,28 +70,29 @@ router.get('/:id', async (req, res) => {
          LEFT JOIN LOCCOLET   LC ON LC.IDLOCCOLET   = R.ID_LOCCOLET
          LEFT JOIN METODEXAME M  ON M.IDMETODEXAME  = R.ID_METODEXAME
         WHERE R.IDRESULEXAME = ?`,
-      [id]
+      [id],
     );
     if (!row) return res.status(404).json({ error: 'Exame não encontrado.' });
 
     // 2) Referências + dica (se concluído)
-    let referencias = [], dica = null;
+    let referencias = [],
+      dica = null;
     if (row.status === 'CONC') {
       const [refs] = await pool.query(
         `SELECT DESCRICAO, VALMIN, VALMAX, OBSERV
            FROM REFPROCED
           WHERE ID_PROCED = ?
           ORDER BY VALMIN`,
-        [row.idProced]
+        [row.idProced],
       );
       referencias = refs;
 
       const valor = parseFloat(row.resultado);
       if (!isNaN(valor) && refs.length) {
-        const faixa = refs.find(f => valor >= f.VALMIN && valor <= f.VALMAX);
-        if (faixa)      dica = faixa.OBSERV?.trim() || `Dentro da faixa "${faixa.DESCRICAO}".`;
+        const faixa = refs.find((f) => valor >= f.VALMIN && valor <= f.VALMAX);
+        if (faixa) dica = faixa.OBSERV?.trim() || `Dentro da faixa "${faixa.DESCRICAO}".`;
         else if (valor < refs[0].VALMIN) dica = 'Abaixo da referência mínima.';
-        else                            dica = 'Acima da referência máxima.';
+        else dica = 'Acima da referência máxima.';
       }
     }
 
@@ -106,17 +107,33 @@ router.get('/:id', async (req, res) => {
 /* CRIAR – status = PEND                      */
 /*────────────────────────────────────────────*/
 router.post('/novo', async (req, res) => {
-  const { idAgenda = null, idProced, idPaciente, idLocColet, observacao = null } = req.body || {};
+  const {
+    idAgenda = null,
+    idProced,
+    idPaciente,
+    idLocColet,
+    observacao = null,
+    gestante = null, // ← novo
+    jejum = null, // ← novo
+  } = req.body || {};
 
-  if (!idProced || !idPaciente || !idLocColet)
-    return res.status(400).json({ error: 'Campos obrigatórios ausentes.' });
+  if (!idProced || !idPaciente || !idLocColet) return res.status(400).json({ error: 'Campos obrigatórios ausentes.' });
 
   try {
     const [ins] = await pool.query(
       `INSERT INTO RESULEXAME
-         (ID_AGENDA,ID_PROCED,ID_PACIENTE,DATACOLE,ID_LOCCOLET,OBSERVACAO,STATUSEXA)
-       VALUES (?,?,?,?,?,?,'PEND')`,
-      [idAgenda, idProced, idPaciente, new Date(), idLocColet, observacao]
+         (ID_AGENDA,ID_PROCED,ID_PACIENTE,DATACOLE,ID_LOCCOLET,GESTANTE,JEJUM,OBSERVACAO,STATUSEXA)
+       VALUES (?,?,?,?,?,?,?,?, 'PEND')`,
+      [
+        idAgenda,
+        idProced,
+        idPaciente,
+        new Date(),
+        idLocColet,
+        gestante !== null ? Number(gestante) : null,
+        jejum !== null ? Number(jejum) : null,
+        observacao,
+      ],
     );
     res.status(201).json({ idResul: ins.insertId });
   } catch (e) {
@@ -131,8 +148,7 @@ router.post('/novo', async (req, res) => {
 router.put('/:id/cancelar', async (req, res) => {
   const id = Number(req.params.id);
   const { motivo = '' } = req.body || {};
-  if (!motivo.trim())
-    return res.status(400).json({ error: 'Motivo obrigatório.' });
+  if (!motivo.trim()) return res.status(400).json({ error: 'Motivo obrigatório.' });
 
   try {
     await pool.query(
@@ -140,7 +156,7 @@ router.put('/:id/cancelar', async (req, res) => {
           SET MOTCANC   = ?,
               STATUSEXA = 'CANC'
         WHERE IDRESULEXAME = ?`,
-      [motivo.trim(), id]
+      [motivo.trim(), id],
     );
     res.json({ ok: true });
   } catch (e) {
@@ -155,8 +171,7 @@ router.put('/:id/cancelar', async (req, res) => {
 router.put('/:id', async (req, res) => {
   const id = Number(req.params.id);
   const { resultado, idMetod } = req.body || {};
-  if (!resultado || !idMetod)
-    return res.status(400).json({ error: 'Resultado e metodologia obrigatórios.' });
+  if (!resultado || !idMetod) return res.status(400).json({ error: 'Resultado e metodologia obrigatórios.' });
 
   try {
     await pool.query(
@@ -165,7 +180,7 @@ router.put('/:id', async (req, res) => {
               ID_METODEXAME = ?,
               STATUSEXA     = 'CONC'
         WHERE IDRESULEXAME = ?`,
-      [resultado, idMetod, id]
+      [resultado, idMetod, id],
     );
     res.json({ ok: true });
   } catch (e) {

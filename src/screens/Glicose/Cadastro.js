@@ -1,5 +1,3 @@
-// File: src/screens/Glicose/Cadastro.js
-
 import React, { useState, useEffect } from 'react';
 import {
   SafeAreaView,
@@ -25,7 +23,7 @@ import { cachePacienteTipagem } from '../../storage';
 import styles from './styles';
 import { ID_PROCED_GLICOSE } from '../../constants/procedimentos';
 
-
+/* ─────────────────────────────────────────── */
 const SEX_LABEL = { M: 'Masculino', F: 'Feminino' };
 const UF_LIST = [
   'AC',
@@ -57,28 +55,34 @@ const UF_LIST = [
   'TO',
 ];
 const OUTRO_VALUE = 'OUTRO';
+/* ─────────────────────────────────────────── */
 
 export default function GlicoseCadastro() {
   const nav = useNavigation();
 
-  // etapa 1
+  /* --------------- etapa 1 --------------- */
   const [cpfSearch, setCpfSearch] = useState('');
   const [searching, setSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
-  // etapa 2
+  /* --------------- etapa 2 --------------- */
   const [nome, setNome] = useState('');
   const [dataN, setDataN] = useState('');
   const [sexo, setSexo] = useState('M');
   const [rg, setRg] = useState('');
   const [rgUf, setRgUf] = useState('');
   const [telefone, setTelefone] = useState('');
+
+  /* novos estados */
+  const [jejum, setJejum] = useState(null); // true = sim, false = não
+  const [gestante, setGestante] = useState(null); // true/false se sexo === 'F'
+
   const [locais, setLocais] = useState([]);
   const [locSelecionado, setLocSelecionado] = useState('');
   const [novoLocal, setNovoLocal] = useState('');
   const [observacao, setObservacao] = useState('');
 
-  // máscaras
+  /* ───── máscaras ───── */
   const fmtCpf = (t) =>
     t
       .replace(/\D/g, '')
@@ -95,7 +99,7 @@ export default function GlicoseCadastro() {
       .slice(0, 11)
       .replace(/(\d{2})(\d{1})(\d{4})(\d{4})?/, (_, dd, x, p1, p2) => (p2 ? `(${dd}) ${x} ${p1}-${p2}` : p1 ? `(${dd}) ${x} ${p1}` : `(${dd}) ${x}`));
 
-  // carrega locais
+  /* ───── locais de coleta ───── */
   useEffect(() => {
     (async () => {
       try {
@@ -105,7 +109,7 @@ export default function GlicoseCadastro() {
     })();
   }, []);
 
-  // seletores
+  /* ───── seletores auxiliares (iOS / Android) ───── */
   const openSexoSelector = () => {
     const opts = ['Masculino', 'Feminino', 'Cancelar'];
     if (Platform.OS === 'ios') {
@@ -121,12 +125,14 @@ export default function GlicoseCadastro() {
       ]);
     }
   };
+
   const openUfSelector = () => {
     const opts = [...UF_LIST, 'Cancelar'];
     ActionSheetIOS.showActionSheetWithOptions({ title: 'Selecione o estado', options: opts, cancelButtonIndex: opts.length - 1 }, (i) => {
       if (i < UF_LIST.length) setRgUf(UF_LIST[i]);
     });
   };
+
   const openLocSelector = () => {
     if (Platform.OS !== 'ios') return;
     const labels = locais.map((l) => l.DESCRICAO);
@@ -144,7 +150,7 @@ export default function GlicoseCadastro() {
     );
   };
 
-  // busca CPF
+  /* ───── busca CPF ───── */
   const handleBuscarCpf = async () => {
     const digits = cpfSearch.replace(/\D/g, '');
     if (digits.length !== 11) {
@@ -179,18 +185,20 @@ export default function GlicoseCadastro() {
     }
   };
 
-  // salvar
+  /* ───── salvar ───── */
   const handleSalvar = async () => {
-    // validação de todos os campos obrigatórios
+    /* validações principais */
     if (
       !cpfSearch ||
       !nome.trim() ||
       dataN.length !== 10 ||
       !sexo ||
-      !rg.trim() ||
+      rg.trim() === '' ||
       !rgUf ||
-      !telefone.trim() ||
-      (!locSelecionado && !novoLocal.trim())
+      telefone.trim() === '' ||
+      (!locSelecionado && !novoLocal.trim()) ||
+      jejum === null ||
+      (sexo === 'F' && gestante === null)
     ) {
       Alert.alert('Atenção', 'Preencha todos os campos obrigatórios.');
       return;
@@ -215,43 +223,43 @@ export default function GlicoseCadastro() {
     }
 
     try {
+      /* 1) cria ou atualiza paciente */
       const respPac = await api.post('/pacientes/novo', payloadPac);
       const idPac = respPac.data.idPaciente ?? respPac.data.idpaciente;
 
+      /* 2) resolve local */
       let idLoc = null;
       if (locSelecionado === OUTRO_VALUE) {
         const rl = await api.post('/loccolet/novo', { descricao: novoLocal.trim() });
         idLoc = rl.data.id;
       } else idLoc = Number(locSelecionado);
 
+      /* 3) envia exame */
       await api.post('/resulsexame/novo', {
         idAgenda: null,
         idProced: ID_PROCED_GLICOSE,
         idPaciente: idPac,
         idLocColet: idLoc,
-        resultado: null,
         observacao,
-        dataCole: new Date().toISOString().slice(0, 19).replace('T', ' '),
+        gestante: sexo === 'F' ? (gestante ? 1 : 0) : null,
+        jejum: jejum ? 1 : 0,
       });
 
-      Alert.alert('Sucesso', 'Paciente e exame de glicose cadastrados!', [
-        {
-          text: 'OK',
-          onPress: () => nav.goBack(),
-        },
-      ]);
+      Alert.alert('Sucesso', 'Paciente e exame de glicose cadastrados!', [{ text: 'OK', onPress: () => nav.goBack() }]);
     } catch (e) {
       console.error(e);
       Alert.alert('Erro', 'Falha no servidor.');
     }
   };
 
+  /* ───── UI ───── */
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <SafeAreaView style={styles.safeContainer}>
           <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
             {!hasSearched ? (
+              /* ------------ etapa 1: busca CPF ------------ */
               <View style={styles.formContainer}>
                 <Text style={styles.headerText}>Buscar CPF</Text>
                 <TextInput
@@ -267,15 +275,20 @@ export default function GlicoseCadastro() {
                 </TouchableOpacity>
               </View>
             ) : (
+              /* ------------ etapa 2: cadastro ------------ */
               <>
                 <Text style={styles.headerText}>Cadastrar Glicose</Text>
                 <View style={styles.formContainer}>
+                  {/* campos já existentes */}
                   <Text style={styles.label}>CPF:</Text>
                   <TextInput style={[styles.input, { backgroundColor: '#eee' }]} value={cpfSearch} editable={false} />
+
                   <Text style={styles.label}>Nome:</Text>
                   <TextInput style={styles.input} value={nome} onChangeText={setNome} />
+
                   <Text style={styles.label}>Data de Nascimento:</Text>
                   <TextInput style={styles.input} value={dataN} onChangeText={(t) => setDataN(fmtData(t))} keyboardType="numeric" maxLength={10} />
+
                   <Text style={styles.label}>Sexo:</Text>
                   {Platform.OS === 'ios' ? (
                     <TouchableOpacity style={localStyles.select} onPress={openSexoSelector}>
@@ -283,7 +296,7 @@ export default function GlicoseCadastro() {
                     </TouchableOpacity>
                   ) : (
                     <View style={localStyles.pickerWrapper}>
-                      <Picker selectedValue={sexo} onValueChange={(valor) => setSexo(valor)} mode="dropdown" style={{ height: 50 }}>
+                      <Picker selectedValue={sexo} onValueChange={(v) => setSexo(v)} mode="dropdown" style={{ height: 50 }}>
                         <Picker.Item label="Selecione o sexo" value="" />
                         <Picker.Item label="Masculino" value="M" />
                         <Picker.Item label="Feminino" value="F" />
@@ -291,8 +304,41 @@ export default function GlicoseCadastro() {
                     </View>
                   )}
 
+                  {/* ------------- novos seletores ------------- */}
+                  <Text style={styles.label}>Paciente estava em jejum?</Text>
+                  <View style={localStyles.toggleRow}>
+                    {['Sim', 'Não'].map((lbl, i) => (
+                      <TouchableOpacity
+                        key={lbl}
+                        style={[localStyles.toggleBtn, jejum === (i === 0) && localStyles.toggleBtnActive]}
+                        onPress={() => setJejum(i === 0)}
+                      >
+                        <Text style={jejum === (i === 0) ? { color: '#fff' } : null}>{lbl}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  {sexo === 'F' && (
+                    <>
+                      <Text style={styles.label}>Paciente está gestante?</Text>
+                      <View style={localStyles.toggleRow}>
+                        {['Sim', 'Não'].map((lbl, i) => (
+                          <TouchableOpacity
+                            key={lbl}
+                            style={[localStyles.toggleBtn, gestante === (i === 0) && localStyles.toggleBtnActive]}
+                            onPress={() => setGestante(i === 0)}
+                          >
+                            <Text style={gestante === (i === 0) ? { color: '#fff' } : null}>{lbl}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </>
+                  )}
+
+                  {/* ---------- restante dos campos ---------- */}
                   <Text style={styles.label}>RG:</Text>
                   <TextInput style={styles.input} value={rg} onChangeText={(t) => setRg(t.replace(/\D/g, ''))} keyboardType="numeric" />
+
                   <Text style={styles.label}>UF de Emissão:</Text>
                   {Platform.OS === 'ios' ? (
                     <TouchableOpacity style={localStyles.select} onPress={openUfSelector}>
@@ -308,6 +354,7 @@ export default function GlicoseCadastro() {
                       </Picker>
                     </View>
                   )}
+
                   <Text style={styles.label}>Telefone:</Text>
                   <TextInput
                     style={styles.input}
@@ -316,6 +363,7 @@ export default function GlicoseCadastro() {
                     keyboardType="phone-pad"
                     maxLength={16}
                   />
+
                   <Text style={styles.label}>Local de Coleta:</Text>
                   {Platform.OS === 'ios' ? (
                     <TouchableOpacity style={localStyles.select} onPress={openLocSelector}>
@@ -344,12 +392,14 @@ export default function GlicoseCadastro() {
                       </Picker>
                     </View>
                   )}
+
                   {locSelecionado === OUTRO_VALUE && (
                     <>
                       <Text style={styles.label}>Novo local:</Text>
                       <TextInput style={styles.input} value={novoLocal} onChangeText={setNovoLocal} />
                     </>
                   )}
+
                   <Text style={styles.label}>Observação:</Text>
                   <TextInput style={[styles.input, { height: 80 }]} value={observacao} onChangeText={setObservacao} multiline />
 
@@ -366,21 +416,19 @@ export default function GlicoseCadastro() {
   );
 }
 
+/* ───────────────────── estilos locais ───────────────────── */
 const localStyles = StyleSheet.create({
-  select: {
-    height: 48,
-    borderWidth: 1,
-    borderColor: '#ccc',
+  select: { height: 48, borderWidth: 1, borderColor: '#ccc', borderRadius: 6, justifyContent: 'center', paddingHorizontal: 12, marginBottom: 12 },
+  pickerWrapper: { borderWidth: 1, borderColor: '#ccc', borderRadius: 6, overflow: 'hidden', marginBottom: 12 },
+  toggleRow: { flexDirection: 'row', marginBottom: 12 },
+  toggleBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    marginHorizontal: 4,
     borderRadius: 6,
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-    marginBottom: 12,
-  },
-  pickerWrapper: {
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 6,
-    overflow: 'hidden',
-    marginBottom: 12,
+    borderColor: '#0077cc',
+    alignItems: 'center',
   },
+  toggleBtnActive: { backgroundColor: '#2e7d32' },
 });
