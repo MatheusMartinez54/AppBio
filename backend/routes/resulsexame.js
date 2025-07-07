@@ -78,12 +78,23 @@ router.get('/:id', async (req, res) => {
     let referencias = [],
       dica = null;
     if (row.status === 'CONC') {
+      /* ------------------------------------------------------------------
+       * Filtra REFPROCED por:
+       *  • mesmo procedimento
+       *  • mesma condição de jejum (0/1)
+       *  • mesma condição de gestação (0/1)               ────────────── */
+
+      const gest = row.gestante === null ? 0 : row.gestante; // null → 0
+      const jej = row.jejum === null ? 0 : row.jejum; // segurança
+
       const [refs] = await pool.query(
         `SELECT DESCRICAO, VALMIN, VALMAX, OBSERV
            FROM REFPROCED
           WHERE ID_PROCED = ?
+            AND GESTANTE  = ?
+            AND JEJUM     = ?
           ORDER BY VALMIN`,
-        [row.idProced],
+        [row.idProced, gest, jej],
       );
       referencias = refs;
 
