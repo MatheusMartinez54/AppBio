@@ -1,26 +1,17 @@
 // File: src/screens/Relatorios/relatorios.js
-
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, FlatList, ActivityIndicator, Alert, StyleSheet } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system';
+import { Asset } from 'expo-asset';
+
 import api from '../../services/api';
 
-// Função para aplicar máscara de status
-function maskStatus(status) {
-  switch (status) {
-    case 'PEND':
-      return 'Pendente';
-    case 'CONC':
-      return 'Concluído';
-    case 'CANC':
-      return 'Cancelado';
-    default:
-      return status;
-  }
-}
+/* util */
+const maskStatus = (s) => ({ PEND: 'Pendente', CONC: 'Concluído', CANC: 'Cancelado' }[s] ?? s);
 
 export default function Relatorios() {
   const isFocused = useIsFocused();
@@ -32,9 +23,20 @@ export default function Relatorios() {
     { label: 'Tipagem', value: 4350, selected: false },
     { label: 'Glicose', value: 3027, selected: false },
   ]);
-
   const [locals, setLocals] = useState([]);
 
+  /* logo base64 */
+  const [logo64, setLogo64] = useState('');
+  useEffect(() => {
+    (async () => {
+      const asset = Asset.fromModule(require('../../../assets/logo-fasiclin.png'));
+      await asset.downloadAsync();
+      const b64 = await FileSystem.readAsStringAsync(asset.localUri || asset.uri, { encoding: FileSystem.EncodingType.Base64 });
+      setLogo64(`data:image/png;base64,${b64}`);
+    })();
+  }, []);
+
+  /* carrega locais */
   useEffect(() => {
     (async () => {
       try {
@@ -46,6 +48,7 @@ export default function Relatorios() {
     })();
   }, []);
 
+  /* recarrega lista sempre que filtros mudam ou a aba volta ao foco */
   useEffect(() => {
     fetchReports();
   }, [isFocused, procedures, locals]);
@@ -64,7 +67,6 @@ export default function Relatorios() {
       const res = await api.get('/relatorios', {
         params: { procedimentos: procIds, locais: locIds },
       });
-      // Ordena pelo ID crescente (menor para maior)
       const sorted = Array.isArray(res.data) ? res.data.sort((a, b) => a.id - b.id) : [];
       setData(sorted);
     } catch (err) {
@@ -80,60 +82,66 @@ export default function Relatorios() {
     copy[idx].selected = !copy[idx].selected;
     setProcedures(copy);
   }
-
   function toggleLocal(idx) {
     const copy = [...locals];
     copy[idx].selected = !copy[idx].selected;
     setLocals(copy);
   }
 
+  /* gera PDF com logo + nome da clínica */
   async function handleGeneratePDF() {
     if (!data.length) {
       Alert.alert('Sem registros', 'Não há dados para gerar PDF.');
       return;
     }
+
     const rowsHtml = data
-      .map((item) => {
-        const procLabel = item.procedimentoNome || procedures.find((p) => p.value === item.idProced)?.label || item.idProced;
-        const statusLabel = maskStatus(item.status);
-        // usa resultado, senão observacao (tipagem)
-        const resultado = item.resultado != null ? item.resultado : item.observacao != null ? item.observacao : '-';
-        return `
-        <tr>
-          <td>${item.id}</td>
-          <td>${procLabel}</td>
-          <td>${item.local}</td>
-          <td>${resultado}</td>
-          <td>${statusLabel}</td>
-        </tr>`;
+      .map((i) => {
+        const procLabel = i.procedimentoNome || procedures.find((p) => p.value === i.idProced)?.label || i.idProced;
+        const statusLabel = maskStatus(i.status);
+        const resultado = i.resultado != null ? i.resultado : i.observacao != null ? i.observacao : '-';
+        return `<tr><td>${i.id}</td><td>${procLabel}</td><td>${i.local}</td><td>${resultado}</td><td>${statusLabel}</td></tr>`;
       })
       .join('');
+
     const html = `
-      <html>
-        <head><meta charset="utf-8"><title>Relatórios Filtrados</title></head>
-        <body style="font-family:sans-serif;padding:20px">
-          <h1 style="color:#388e3c">Relatórios</h1>
-          <table border="1" cellpadding="6" cellspacing="0" width="100%" style="border-collapse:collapse">
-            <thead>
-              <tr style="background-color:#c8e6c9">
-                <th>ID</th><th>Procedimento</th><th>Local</th><th>Resultado</th><th>Status</th>
-              </tr>
-            </thead>
-            <tbody>${rowsHtml}</tbody>
-          </table>
-        </body>
-      </html>
+      <html><head><meta charset="utf-8">
+        <style>
+          body{font-family:Arial,Helvetica,sans-serif;padding:28px;line-height:1.4}
+          h1{color:#2e7d32;text-align:center;font-size:22px;margin:0 0 18px}
+          table{border-collapse:collapse;width:100%;font-size:12px}
+          th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}
+          th{background:#c8e6c9}
+        </style>
+      </head><body>
+
+        <div style="text-align:center;margin-bottom:16px;">
+          <img src="${logo64}" style="width:180px"/>
+        </div>
+
+        <h1>Clínica Fasiclin – Relatórios</h1>
+
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th><th>Procedimento</th><th>Local</th><th>Resultado</th><th>Status</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </body></html>
     `;
+
     try {
       const { uri } = await Print.printToFileAsync({ html });
-      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
-      else Alert.alert('Compartilhamento não disponível');
+      (await Sharing.isAvailableAsync()) ? await Sharing.shareAsync(uri) : Alert.alert('PDF gerado em:', uri);
     } catch (err) {
       console.error('Erro ao gerar PDF:', err);
       Alert.alert('Erro', 'Falha ao gerar o PDF.');
     }
   }
 
+  /* ---------- renderização da lista e filtros ---------- */
   function renderItem({ item }) {
     const procLabel = item.procedimentoNome || procedures.find((p) => p.value === item.idProced)?.label || item.idProced;
     const statusLabel = maskStatus(item.status);
@@ -180,6 +188,7 @@ export default function Relatorios() {
     );
   }
 
+  /* ---------- JSX ---------- */
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -201,9 +210,15 @@ export default function Relatorios() {
   );
 }
 
+/* ---------- estilos ---------- */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#e8f5e9' },
-  header: { paddingTop: 16, paddingBottom: 8, alignItems: 'center', backgroundColor: '#e8f5e9' },
+  header: {
+    paddingTop: 16,
+    paddingBottom: 8,
+    alignItems: 'center',
+    backgroundColor: '#e8f5e9',
+  },
   headerText: { fontSize: 24, fontWeight: 'bold', color: '#388e3c' },
   filterCard: {
     backgroundColor: '#fff',
@@ -218,7 +233,12 @@ const styles = StyleSheet.create({
   },
   filterLabel: { fontWeight: 'bold', color: '#388e3c' },
   filterRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8 },
-  filterOption: { flexDirection: 'row', alignItems: 'center', marginRight: 16, marginBottom: 8 },
+  filterOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 16,
+    marginBottom: 8,
+  },
   filterOptionText: { marginLeft: 4, color: '#388e3c' },
   pdfButton: {
     flexDirection: 'row',
@@ -230,7 +250,17 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   pdfButtonText: { color: '#fff', fontWeight: 'bold', marginLeft: 8 },
-  itemContainer: { backgroundColor: '#c8e6c9', padding: 16, borderRadius: 8, marginBottom: 12 },
-  itemTitle: { fontWeight: 'bold', fontSize: 16, color: '#2e7d32', marginBottom: 4 },
+  itemContainer: {
+    backgroundColor: '#c8e6c9',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  itemTitle: {
+    fontWeight: 'bold',
+    fontSize: 16,
+    color: '#2e7d32',
+    marginBottom: 4,
+  },
   itemText: { fontSize: 14, color: '#2e7d32', marginBottom: 2 },
 });

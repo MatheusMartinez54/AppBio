@@ -1,17 +1,19 @@
 // File: src/screens/Glicose/Detalhes.js
 import React, { useEffect, useState, useMemo } from 'react';
-import { SafeAreaView, ScrollView, View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { SafeAreaView, ScrollView, View, Text, TouchableOpacity, ActivityIndicator, Alert, Platform } from 'react-native';
 import { useRoute, useNavigation, useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system';
+import { Asset } from 'expo-asset';
 import Dialog from 'react-native-dialog';
 import api from '../../services/api';
 import styles from './styles';
 
-/*──────────────────────────────────────────────*/
-/* Utilidades                                   */
-/*──────────────────────────────────────────────*/
+/*────────────────────────────*/
+/* Utilidades                  */
+/*────────────────────────────*/
 const maskStatus = (s) => ({ PEND: 'Pendente', CONC: 'Concluído', CANC: 'Cancelado' }[s] ?? s);
 
 function calculaIdade(iso) {
@@ -35,22 +37,35 @@ function calculaIdade(iso) {
   return `${anos}a ${meses}m ${dias}d`;
 }
 
-/*──────────────────────────────────────────────*/
-/* Componente                                   */
-/*──────────────────────────────────────────────*/
+/*────────────────────────────*/
+/* Componente                  */
+/*────────────────────────────*/
 export default function GlicoseDetalhes() {
   const { exameId, pacienteId, origem } = useRoute().params;
   const navigation = useNavigation();
   const isFocused = useIsFocused();
 
+  /* estados */
   const [paciente, setPaciente] = useState(null);
   const [exame, setExame] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [logo64, setLogo64] = useState(''); // base64 da logo
 
+  /* cancelamento */
   const [showCancel, setShowCancel] = useState(false);
   const [motivo, setMotivo] = useState('');
 
-  /*────────── Carregamento ──────────*/
+  /*────────── carrega logo uma vez ──────────*/
+  useEffect(() => {
+    (async () => {
+      const asset = Asset.fromModule(require('../../../assets/logo-fasiclin.png'));
+      await asset.downloadAsync();
+      const base64 = await FileSystem.readAsStringAsync(asset.localUri || asset.uri, { encoding: FileSystem.EncodingType.Base64 });
+      setLogo64(`data:image/png;base64,${base64}`);
+    })();
+  }, []);
+
+  /*────────── carrega dados ──────────*/
   useEffect(() => {
     if (origem === 'offline') {
       Alert.alert('Offline', 'Registro ainda não sincronizado.');
@@ -60,10 +75,7 @@ export default function GlicoseDetalhes() {
     (async () => {
       try {
         setLoading(true);
-        const [{ data: ex }, { data: pc }] = await Promise.all([
-          api.get(`/resulsexame/${exameId}`), // inclui gestante / jejum
-          api.get(`/pacientes/${pacienteId}`), // inclui sexo
-        ]);
+        const [{ data: ex }, { data: pc }] = await Promise.all([api.get(`/resulsexame/${exameId}`), api.get(`/pacientes/${pacienteId}`)]);
         setExame(ex);
         setPaciente(pc);
       } catch (err) {
@@ -75,82 +87,89 @@ export default function GlicoseDetalhes() {
     })();
   }, [exameId, pacienteId, origem, isFocused]);
 
-  /*────────── Referência aplicada ──────────*/
+  /*────────── referência aplicada ──────────*/
   const referenciaAplicada = useMemo(() => {
     if (!exame?.referencias || !exame.resultado) return null;
     const v = parseFloat(exame.resultado);
     return exame.referencias.find((r) => v >= r.VALMIN && v <= r.VALMAX) || null;
   }, [exame]);
 
-  /*────────── PDF ──────────*/
-  async function handleGerarPDF() {
-    if (!paciente || !exame) return;
+ /*────────── gera PDF ──────────*/
+async function handleGerarPDF() {
+  if (!paciente || !exame) return;
 
-    const refRow = referenciaAplicada
-      ? `<tr><td>${referenciaAplicada.DESCRICAO}</td><td>${parseFloat(referenciaAplicada.VALMIN)} – ${parseFloat(
-          referenciaAplicada.VALMAX,
-        )}</td></tr>`
+  /* referência + dica */
+  const refHtml =
+    exame.status === 'CONC' && referenciaAplicada
+      ? `
+        <h3 style="margin:20px 0 6px 0;">Referência aplicada</h3>
+        <p><strong>${referenciaAplicada.DESCRICAO}</strong><br/>
+           Intervalo: ${parseFloat(referenciaAplicada.VALMIN)} – ${parseFloat(
+           referenciaAplicada.VALMAX,
+         )} mg/dL</p>
+        ${exame.dica ? `<p style="margin-top:6px;"><strong>Dica:</strong> ${exame.dica}</p>` : ''}
+      `
       : '';
 
-    const dicaHtml = exame.dica ? `<p class="section"><strong>Dica:</strong> ${exame.dica}</p>` : '';
+  /* HTML */
+  const html = `
+    <html><head><meta charset="utf-8">
+      <style>
+        body{font-family:Arial,Helvetica,sans-serif;padding:28px;line-height:1.45}
+        h1{color:#2e7d32;text-align:center;font-size:22px;margin:0 0 18px}
+        h2{font-size:16px;color:#2e7d32;margin:24px 0 8px}
+        h3{font-size:14px;color:#2e7d32;margin:18px 0 4px}
+        p{margin:3px 0;font-size:13px}
+        .lbl{font-weight:600}
+      </style>
+    </head><body>
 
-    const html = `
-      <html><head><meta charset="utf-8"><style>
-        body{font-family:sans-serif;padding:20px;line-height:1.5}
-        h1{color:#2e7d32;margin-bottom:.3em}
-        p{margin:.3em 0}.section{margin-top:1.2em}
-        table{border-collapse:collapse;width:100%;margin-top:1em}
-        th,td{border:1px solid #ccc;padding:8px 12px;text-align:left}
-        th{background-color:#f0f0f0}tr:nth-child(even){background:#fafafa}
-      </style></head><body>
-      <div style="text-align:center;margin-bottom:20px;">
+      <!-- Logo maior -->
+      <div style="text-align:center;margin-bottom:16px;">
+        <img src="${logo64}" style="width:180px"/>
+      </div>
 
+      <h1>Clínica Fasiclin – Resultado de Glicose</h1>
 
+      <!-- Dados do paciente -->
+      <h2>Dados do paciente</h2>
+      <p><span class="lbl">Nome:</span> ${paciente.nome}</p>
+      <p><span class="lbl">Idade:</span> ${calculaIdade(paciente.dataNascISO)}</p>
+      <p><span class="lbl">Data nasc.:</span> ${paciente.dataNascimento}</p>
+      <p><span class="lbl">CPF:</span> ${paciente.cpf}</p>
+      <p><span class="lbl">Telefone:</span> ${paciente.telefone ?? '-'}</p>
 
+      <!-- Dados do exame -->
+      <h2>Dados do exame</h2>
+      <p><span class="lbl">Local de coleta:</span> ${exame.local}</p>
+      <p><span class="lbl">Jejum:</span> ${exame.jejum ? 'Sim' : 'Não'}</p>
+      ${
+        paciente.sexo?.startsWith('F')
+          ? `<p><span class="lbl">Gestante:</span> ${exame.gestante ? 'Sim' : 'Não'}</p>`
+          : ''
+      }
+      <p><span class="lbl">Valor da glicose:</span> ${exame.resultado || '-'} mg/dL</p>
+      <p><span class="lbl">Metodologia:</span> ${exame.metodoNome || '-'}</p>
+      <p><span class="lbl">Status:</span> ${maskStatus(exame.status)}</p>
+      ${exame.motivo ? `<p><span class="lbl">Motivo cancelamento:</span> ${exame.motivo}</p>` : ''}
+      ${exame.observacao ? `<p><span class="lbl">Observação:</span> ${exame.observacao}</p>` : ''}
 
-     <img src="file:///android_asset/logo-fasiclin.png" 
-          style="max-width:150px;"/>
-   </div>
+      ${refHtml}
+    </body></html>
+  `;
 
-
-        <h1>Detalhes do Paciente (Glicose)</h1>
-        <div class="section">
-          <p><strong>Nome:</strong> ${paciente.nome}</p>
-          <p><strong>Idade:</strong> ${calculaIdade(paciente.dataNascISO)}</p>
-<p><strong>Data Cadastro:</strong> ${paciente.dataCadastro ?? '-'}</p>
-          <p><strong>Data Nascimento:</strong> ${paciente.dataNascimento}</p>
-          <p><strong>CPF:</strong> ${paciente.cpf}</p>
-          <p><strong>Telefone:</strong> ${paciente.telefone ?? '-'}</p>
-          <p><strong>Local de Coleta:</strong> ${exame.local}</p>
-          <p><strong>Jejum:</strong> ${exame.jejum ? 'Sim' : 'Não'}</p>
-          ${paciente.sexo?.startsWith('F') ? `<p><strong>Gestante:</strong> ${exame.gestante ? 'Sim' : 'Não'}</p>` : ''}
-          <p><strong>Observação:</strong> ${exame.observacao || '-'}</p>
-          <p><strong>Valor da Glicose:</strong> ${exame.resultado || '-'} mg/dL</p>
-          <p><strong>Metodologia:</strong> ${exame.metodoNome || '-'}</p>
-          <p><strong>Status:</strong> ${maskStatus(exame.status)}</p>
-          ${exame.motivo ? `<p><strong>Motivo Cancelamento:</strong> ${exame.motivo}</p>` : ''}
-        </div>
-        ${
-          exame.status === 'CONC' && referenciaAplicada
-            ? `<div class="section"><h2>Referência Aplicada</h2>
-                 <table><tr><th>Tipo</th><th>Intervalo (mg/dL)</th></tr>${refRow}</table>
-                 ${dicaHtml}
-               </div>`
-            : ''
-        }
-      </body></html>
-    `;
-
-    try {
-      const { uri } = await Print.printToFileAsync({ html });
-      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
-      else Alert.alert('Compartilhamento não disponível');
-    } catch {
-      Alert.alert('Erro', 'Falha ao gerar o PDF');
-    }
+  try {
+    const { uri } = await Print.printToFileAsync({ html });
+    (await Sharing.isAvailableAsync())
+      ? await Sharing.shareAsync(uri)
+      : Alert.alert('PDF gerado em:', uri);
+  } catch {
+    Alert.alert('Erro', 'Falha ao gerar o PDF');
   }
+}
 
-  /*────────── Cancelamento ──────────*/
+
+  /*────────── cancelar exame ──────────*/
   async function confirmarCancel() {
     if (!motivo.trim()) {
       Alert.alert('Atenção', 'Informe o motivo.');
@@ -168,7 +187,7 @@ export default function GlicoseDetalhes() {
     }
   }
 
-  /*────────── Loading / Erro ──────────*/
+  /*────────── loading / erro ──────────*/
   if (loading) {
     return (
       <SafeAreaView style={styles.safeContainer}>
@@ -184,7 +203,7 @@ export default function GlicoseDetalhes() {
     );
   }
 
-  /*────────── Render ──────────*/
+  /*────────── Render na tela ──────────*/
   return (
     <SafeAreaView style={styles.safeContainer}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
@@ -196,13 +215,13 @@ export default function GlicoseDetalhes() {
 
         {/* Conteúdo */}
         <View style={styles.content}>
+          {/* paciente */}
           <Text style={styles.label}>Nome:</Text>
           <Text style={styles.value}>{paciente.nome}</Text>
 
           <Text style={styles.label}>Idade:</Text>
           <Text style={styles.value}>{calculaIdade(paciente.dataNascISO)}</Text>
 
-          <Text style={styles.label}>Data de Cadastro:</Text>
           <Text style={styles.value}>{paciente.dataCadastro ?? '-'}</Text>
 
           <Text style={styles.label}>Data Nascimento:</Text>
@@ -214,10 +233,10 @@ export default function GlicoseDetalhes() {
           <Text style={styles.label}>Telefone:</Text>
           <Text style={styles.value}>{paciente.telefone ?? '-'}</Text>
 
-          <Text style={styles.label}>Local de Coleta:</Text>
+          {/* exame */}
+          <Text style={[styles.label, { marginTop: 12 }]}>Local de Coleta:</Text>
           <Text style={styles.value}>{exame.local}</Text>
 
-          {/* Novos campos */}
           <Text style={styles.label}>Jejum:</Text>
           <Text style={styles.value}>{exame.jejum ? 'Sim' : 'Não'}</Text>
 
@@ -228,14 +247,11 @@ export default function GlicoseDetalhes() {
             </>
           )}
 
-          <Text style={styles.label}>Observação:</Text>
-          <Text style={styles.value}>{exame.observacao || '-'}</Text>
-
           <Text style={styles.label}>Valor da Glicose:</Text>
           <Text style={styles.value}>{exame.resultado || '-'} mg/dL</Text>
 
           <Text style={styles.label}>Metodologia:</Text>
-          <Text style={styles.value}>{exame.metodoNome ?? '-'}</Text>
+          <Text style={styles.value}>{exame.metodoNome || '-'}</Text>
 
           <Text style={styles.label}>Status:</Text>
           <Text style={styles.value}>{maskStatus(exame.status)}</Text>
@@ -244,6 +260,13 @@ export default function GlicoseDetalhes() {
             <>
               <Text style={styles.label}>Motivo Cancelamento:</Text>
               <Text style={styles.value}>{exame.motivo}</Text>
+            </>
+          )}
+
+          {exame.observacao && (
+            <>
+              <Text style={styles.label}>Observação:</Text>
+              <Text style={styles.value}>{exame.observacao}</Text>
             </>
           )}
 
