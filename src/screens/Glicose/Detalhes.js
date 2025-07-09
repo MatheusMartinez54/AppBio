@@ -14,6 +14,27 @@ import styles from './styles';
 /*──────────────────────────────────────────────*/
 const maskStatus = (s) => ({ PEND: 'Pendente', CONC: 'Concluído', CANC: 'Cancelado' }[s] ?? s);
 
+function calculaIdade(iso) {
+  if (!iso) return '-';
+  const nasc = new Date(iso);
+  const hoje = new Date();
+
+  let anos = hoje.getFullYear() - nasc.getFullYear();
+  let meses = hoje.getMonth() - nasc.getMonth();
+  let dias = hoje.getDate() - nasc.getDate();
+
+  if (dias < 0) {
+    meses--;
+    dias += new Date(hoje.getFullYear(), hoje.getMonth(), 0).getDate();
+  }
+  if (meses < 0) {
+    anos--;
+    meses += 12;
+  }
+
+  return `${anos}a ${meses}m ${dias}d`;
+}
+
 /*──────────────────────────────────────────────*/
 /* Componente                                   */
 /*──────────────────────────────────────────────*/
@@ -82,9 +103,21 @@ export default function GlicoseDetalhes() {
         th,td{border:1px solid #ccc;padding:8px 12px;text-align:left}
         th{background-color:#f0f0f0}tr:nth-child(even){background:#fafafa}
       </style></head><body>
+      <div style="text-align:center;margin-bottom:20px;">
+
+
+
+
+     <img src="file:///android_asset/logo-fasiclin.png" 
+          style="max-width:150px;"/>
+   </div>
+
+
         <h1>Detalhes do Paciente (Glicose)</h1>
         <div class="section">
           <p><strong>Nome:</strong> ${paciente.nome}</p>
+          <p><strong>Idade:</strong> ${calculaIdade(paciente.dataNascISO)}</p>
+<p><strong>Data Cadastro:</strong> ${paciente.dataCadastro ?? '-'}</p>
           <p><strong>Data Nascimento:</strong> ${paciente.dataNascimento}</p>
           <p><strong>CPF:</strong> ${paciente.cpf}</p>
           <p><strong>Telefone:</strong> ${paciente.telefone ?? '-'}</p>
@@ -165,6 +198,12 @@ export default function GlicoseDetalhes() {
         <View style={styles.content}>
           <Text style={styles.label}>Nome:</Text>
           <Text style={styles.value}>{paciente.nome}</Text>
+
+          <Text style={styles.label}>Idade:</Text>
+          <Text style={styles.value}>{calculaIdade(paciente.dataNascISO)}</Text>
+
+          <Text style={styles.label}>Data de Cadastro:</Text>
+          <Text style={styles.value}>{paciente.dataCadastro ?? '-'}</Text>
 
           <Text style={styles.label}>Data Nascimento:</Text>
           <Text style={styles.value}>{paciente.dataNascimento}</Text>
