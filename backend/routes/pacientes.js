@@ -105,7 +105,7 @@ router.get('/:id', async (req, res) => {
          PF.CPFPESSOA                         AS cpf,
          DATE_FORMAT(PF.DATANASCPES, '%d/%m/%Y') AS dataNascimento,
          PF.DATANASCPES                              AS dataNascISO,     -- ← novo
-         DATE_FORMAT(P.DTCADASTRO,'%d/%m/%Y')        AS dataCadastro,
+         
          PF.SEXOPESSOA                         AS sexo,
          CO.NUMERO                            AS telefone
        FROM PACIENTE P
